@@ -1,0 +1,48 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+        addToPath: true
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+
+    - script: |
+        docker build -t flask-ip-reverse-app:$(Build.BuildId) .
+      displayName: 'Build Docker image'
+
+    - script: |
+        docker tag flask-ip-reverse-app:$(Build.BuildId) <your-dockerhub-username>/flask-ip-reverse-app:$(Build.BuildId)
+        echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+        docker push <your-dockerhub-username>/flask-ip-reverse-app:$(Build.BuildId)
+      displayName: 'Push Docker image'
+
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    steps:
+    - task: HelmInstaller@1
+      inputs:
+        helmVersionToInstall: 'latest'
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: '<your-azure-subscription>'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group <your-resource-group> --name <your-cluster-name>
+          helm upgrade --install flask-ip-reverse-app ./flask-ip-reverse-app --set image.repository=<your-dockerhub-username>/flask-ip-reverse-app --set image.tag=$(Build.BuildId)
