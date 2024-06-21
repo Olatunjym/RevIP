@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Build and Deploy to GCP Kubernetes
 
 on:
   push:
@@ -6,46 +6,54 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/flask-ip-reverse-app:${{ github.sha }}
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
+    - name: Build and Push Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/flask-ip-reverse-app:latest .
+        docker push ${{ secrets.DOCKER_HUB_USERNAME }}/flask-ip-reverse-app:latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@master
+      with:
+        version: 'latest'
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Authenticate with GCP
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+    - name: Authenticate with GCP
+      run: gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
 
-      - name: Get GKE credentials
-        run: gcloud container clusters get-credentials reverseip --zone us-central1-a --project flaskreverseip
+    - name: Get GKE credentials
+      run: gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --zone ${{ secrets.GKE_CLUSTER_ZONE }}
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v1
-        with:
-          version: 'latest'
-     
-      - name: Set up Helm
-        uses: azure/setup-helm@v1
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v1
+      with:
+        version: 'latest'
 
-      - name: Helm upgrade and install
-        run: helm upgrade --install flask-ip-reverse-app ./flask-ip-reverse-app --set image.repository=${{ secrets.DOCKER_USERNAME }}/flask-ip-reverse-app,image.tag=${{ github.sha }}
+    - name: Install Helm
+      run: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Deploy using Helm
+      run: |
+        helm upgrade --install flask-ip-reverse-app ./flask-ip-reverse-app \
+          --namespace default \
+          --set image.repository=${{ secrets.DOCKER_HUB_USERNAME }}/flask-ip-reverse-app,image.tag=latest
+
+    - name: Complete job
+      run: echo "Deployment completed successfully"
