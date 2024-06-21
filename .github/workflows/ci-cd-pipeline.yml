@@ -23,8 +23,8 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/RevIp:latest .
-          docker push ${{ secrets.DOCKER_USERNAME }}/RevIp:latest
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/flask-ip-reverse-app:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/flask-ip-reverse-app:latest
 
   deploy:
     runs-on: ubuntu-latest
