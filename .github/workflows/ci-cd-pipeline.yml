@@ -42,14 +42,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Set up Azure CLI
-      uses: azure/cli@v1
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v1
       with:
-        inlineScript: |
-          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-          az aks get-credentials --resource-group <your-resource-group> --name <your-cluster-name>
+        version: 'latest'
+
+    - name: Set up Azure CLI
+      uses: azure/CLI@v1
+
+    - name: Authenticate with Azure
+      run: az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
+    - name: Get AKS credentials
+      run: az aks get-credentials --resource-group myRG --name reverseip
 
     - name: Deploy to Kubernetes
       run: |
+        kubectl apply -f kubernetes/namespace.yaml
         kubectl apply -f kubernetes/deployment.yaml
         kubectl apply -f kubernetes/service.yaml
